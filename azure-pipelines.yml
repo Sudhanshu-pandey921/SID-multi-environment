@@ -1,0 +1,46 @@
+trigger:
+  branches:
+    include:
+      - main
+      - feature/*
+   
+  paths:
+    include:
+      - SID-multi-environment/*
+    exclude:
+      - README.md
+
+pr:
+ branches:
+   include:
+     - main
+
+parameters:
+  - name: environment
+    displayName: Select Environment
+    type: string
+    default: dev
+    values:
+      - test
+      - prod
+
+variables:
+  - name: tf_version
+    value: 1.6.0
+
+pool: may-pool
+ 
+stages:
+  - stage: FirstStage
+    displayName: Init
+    jobs:
+      - job: terraforminit
+        steps:
+          - task: TerraformTask@5
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              backendServiceArm: 'may-sc'
+              backendAzureRmStorageAccountName: 'maystg12'
+              backendAzureRmContainerName: 'maycnt12'
+              backendAzureRmKey: 'sid.tfstate'
