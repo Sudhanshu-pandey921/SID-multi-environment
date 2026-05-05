@@ -21,6 +21,7 @@ parameters:
     type: string
     default: dev
     values:
+      - dev
       - test
       - prod
 
