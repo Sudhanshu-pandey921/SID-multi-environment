@@ -34,10 +34,6 @@ parameters:
       - test
       - prod
 
-variables:
-  - name: tf_version
-    value: 1.6.0
-
 pool: may-pool
  
 stages:
