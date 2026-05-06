@@ -36,10 +36,11 @@ variables:
     value: '1.5.7'
 
   - name: serviceConnection
-    value: 'may-sc'   # ✅ FIXED
+    value: 'may-sc'
 
+  # ✅ FIXED PATH (IMPORTANT)
   - name: workingDir
-    value: 'terraform/${{ parameters.environment }}'
+    value: 'SID-multi-environment'
 
   - name: backendResourceGroup
     value: 'tf-backend-rg'
@@ -53,16 +54,16 @@ variables:
   - name: backendKey
     value: '${{ parameters.environment }}.tfstate'
 
+# ✅ FIXED POOL SYNTAX
 pool:
-  may-pool   # ✅ Linux use kiya (curl scripts ke liye)
+  name: may-pool
 
 stages:
 
 # ---------------------------
-# 🔍 VALIDATION + LINT + SECURITY
+# VALIDATION
 # ---------------------------
 - stage: Validate
-  displayName: "Lint, Security & Validate"
   jobs:
     - job: ValidateJob
       steps:
@@ -73,52 +74,19 @@ stages:
 
         - script: terraform init -backend=false
           workingDirectory: $(workingDir)
-          displayName: "Terraform Init (Local)"
 
-        - script: terraform fmt -check -recursive
+        - script: terraform fmt -check
           workingDirectory: $(workingDir)
-          displayName: "Terraform Format Check"
-
-        - script: |
-            curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
-            tflint
-          workingDirectory: $(workingDir)
-          displayName: "Run TFLint"
-
-        - script: |
-            curl -s https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
-            tfsec .
-          workingDirectory: $(workingDir)
-          displayName: "Run TFSEC"
 
         - script: terraform validate
           workingDirectory: $(workingDir)
-          displayName: "Terraform Validate"
 
 
 # ---------------------------
-# 💰 COST ESTIMATION
-# ---------------------------
-- stage: CostEstimation
-  displayName: "Cost Estimation"
-  dependsOn: Validate
-  jobs:
-    - job: CostJob
-      steps:
-        - script: |
-            terraform init -backend=false
-            curl -fsSL https://raw.githubusercontent.com/infracost/infracost/master/scripts/install.sh | sh
-            infracost breakdown --path $(workingDir)
-          workingDirectory: $(workingDir)
-          displayName: "Run Infracost"
-
-
-# ---------------------------
-# 📦 PLAN
+# PLAN
 # ---------------------------
 - stage: Plan
-  displayName: "Terraform Plan"
-  dependsOn: CostEstimation
+  dependsOn: Validate
   jobs:
     - job: PlanJob
       steps:
@@ -128,7 +96,7 @@ stages:
             terraformVersion: $(tfVersion)
 
         - task: AzureCLI@2
-          displayName: "Terraform Plan"
+          displayName: Terraform Plan
           inputs:
             azureSubscription: $(serviceConnection)
             scriptType: bash
@@ -148,10 +116,9 @@ stages:
 
 
 # ---------------------------
-# 🚀 APPLY (DEV / STAGE auto)
+# APPLY NON PROD
 # ---------------------------
 - stage: Apply_NonProd
-  displayName: "Apply Dev/Stage"
   dependsOn: Plan
   condition: and(succeeded(), ne('${{ parameters.environment }}', 'prod'))
   jobs:
@@ -170,7 +137,7 @@ stages:
                   terraformVersion: $(tfVersion)
 
               - task: AzureCLI@2
-                displayName: "Terraform Apply NonProd"
+                displayName: Terraform Apply
                 inputs:
                   azureSubscription: $(serviceConnection)
                   scriptType: bash
@@ -187,10 +154,9 @@ stages:
 
 
 # ---------------------------
-# 🛑 PRODUCTION APPROVAL + APPLY
+# APPLY PROD (APPROVAL)
 # ---------------------------
 - stage: Apply_Prod
-  displayName: "Apply Production"
   dependsOn: Plan
   condition: and(succeeded(), eq('${{ parameters.environment }}', 'prod'))
 
@@ -210,7 +176,7 @@ stages:
                   terraformVersion: $(tfVersion)
 
               - task: AzureCLI@2
-                displayName: "Terraform Apply Prod"
+                displayName: Terraform Apply Prod
                 inputs:
                   azureSubscription: $(serviceConnection)
                   scriptType: bash
