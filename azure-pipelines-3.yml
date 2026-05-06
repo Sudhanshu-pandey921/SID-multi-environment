@@ -1,0 +1,233 @@
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+      - feature/*
+  paths:
+    include:
+      - terraform/**
+    exclude:
+      - README.md
+      - docs/**
+
+pr:
+  branches:
+    include:
+      - main
+      - develop
+  paths:
+    include:
+      - terraform/**
+    exclude:
+      - docs/**
+
+parameters:
+  - name: environment
+    type: string
+    default: dev
+    values:
+      - dev
+      - stage
+      - prod
+
+variables:
+  - name: tfVersion
+    value: '1.5.7'
+
+  - name: serviceConnection
+    value: 'azure-service-conn'
+
+  - name: workingDir
+    value: 'terraform/${{ parameters.environment }}'
+
+  - name: backendResourceGroup
+    value: 'tf-backend-rg'
+
+  - name: backendStorageAccount
+    value: 'tfbackendstorage123'
+
+  - name: backendContainer
+    value: 'tfstate'
+
+  - name: backendKey
+    value: '${{ parameters.environment }}.tfstate'
+
+pool:
+  name: may-pool
+
+stages:
+
+# ---------------------------
+# 🔍 VALIDATION + LINT + SECURITY
+# ---------------------------
+- stage: Validate
+  displayName: "Lint, Security & Validate"
+  jobs:
+    - job: ValidateJob
+      steps:
+
+        - task: TerraformInstaller@1
+          inputs:
+            terraformVersion: $(tfVersion)
+
+        # Terraform Init (no backend for validation)
+        - script: |
+            terraform init -backend=false
+          workingDirectory: $(workingDir)
+          displayName: "Terraform Init (Local)"
+
+        # Terraform Format Check
+        - script: |
+            terraform fmt -check
+          workingDirectory: $(workingDir)
+          displayName: "Terraform Format Check"
+
+        # TFLint
+        - script: |
+            curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+            tflint
+          workingDirectory: $(workingDir)
+          displayName: "Run TFLint"
+
+        # TFSEC
+        - script: |
+            curl -s https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
+            tfsec .
+          workingDirectory: $(workingDir)
+          displayName: "Run TFSEC"
+
+        # Validate
+        - script: |
+            terraform validate
+          workingDirectory: $(workingDir)
+          displayName: "Terraform Validate"
+
+
+# ---------------------------
+# 💰 COST ESTIMATION
+# ---------------------------
+- stage: CostEstimation
+  displayName: "Cost Estimation"
+  dependsOn: Validate
+  jobs:
+    - job: CostJob
+      steps:
+        - script: |
+            curl -fsSL https://raw.githubusercontent.com/infracost/infracost/master/scripts/install.sh | sh
+            infracost breakdown --path $(workingDir)
+          displayName: "Run Infracost"
+
+
+# ---------------------------
+# 📦 PLAN
+# ---------------------------
+- stage: Plan
+  displayName: "Terraform Plan"
+  dependsOn: CostEstimation
+  jobs:
+    - job: PlanJob
+      steps:
+
+        - task: TerraformInstaller@1
+          inputs:
+            terraformVersion: $(tfVersion)
+
+        - task: AzureCLI@2
+          inputs:
+            azureSubscription: $(serviceConnection)
+            scriptType: bash
+            scriptLocation: inlineScript
+            inlineScript: |
+              terraform init \
+                -backend-config="resource_group_name=$(backendResourceGroup)" \
+                -backend-config="storage_account_name=$(backendStorageAccount)" \
+                -backend-config="container_name=$(backendContainer)" \
+                -backend-config="key=$(backendKey)"
+
+              terraform plan -out=tfplan
+
+          workingDirectory: $(workingDir)
+          displayName: "Terraform Plan"
+
+        - publish: $(workingDir)/tfplan
+          artifact: tfplan
+
+
+# ---------------------------
+# 🚀 APPLY (DEV / STAGE auto)
+# ---------------------------
+- stage: Apply_NonProd
+  displayName: "Apply Dev/Stage"
+  dependsOn: Plan
+  condition: and(succeeded(), ne('${{ parameters.environment }}', 'prod'))
+  jobs:
+    - deployment: ApplyJob
+      environment: ${{ parameters.environment }}
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+
+              - download: current
+                artifact: tfplan
+
+              - task: TerraformInstaller@1
+                inputs:
+                  terraformVersion: $(tfVersion)
+
+              - task: AzureCLI@2
+                inputs:
+                  azureSubscription: $(serviceConnection)
+                  scriptType: bash
+                  scriptLocation: inlineScript
+                  inlineScript: |
+                    terraform init \
+                      -backend-config="resource_group_name=$(backendResourceGroup)" \
+                      -backend-config="storage_account_name=$(backendStorageAccount)" \
+                      -backend-config="container_name=$(backendContainer)" \
+                      -backend-config="key=$(backendKey)"
+
+                    terraform apply -auto-approve tfplan
+
+                workingDirectory: $(workingDir)
+
+
+# ---------------------------
+# 🛑 PRODUCTION APPROVAL + APPLY
+# ---------------------------
+- stage: Apply_Prod
+  displayName: "Apply Production"
+  dependsOn: Plan
+  condition: and(succeeded(), eq('${{ parameters.environment }}', 'prod'))
+
+  jobs:
+    - deployment: ProdDeployment
+      environment: prod   # 👉 Azure DevOps environment me approval configure karna hoga
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+
+              - download: current
+                artifact: tfplan
+
+              - task: TerraformInstaller@1
+                inputs:
+                  terraformVersion: $(tfVersion)
+
+              - task: AzureCLI@2
+                inputs:
+                  azureSubscription: $(serviceConnection)
+                  scriptType: bash
+                  scriptLocation: inlineScript
+                  inlineScript: |
+                    terraform init \
+                      -backend-config="resource_group_name=$(backendResourceGroup)" \
+                      -backend-config="storage_account_name=$(backendStorageAccount)" \
+                      -backend-config="container_name=$(backendContainer)" \
+                      -backend-config="key=$(backendKey)"
+
+                    terraform apply tfplan
+
+                workingDirectory: $(workingDir)
