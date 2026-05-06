@@ -15,6 +15,15 @@ pr:
    include:
      - main
 
+
+schedules:
+  - cron: "0 3 * * *"
+    displayName: Daily Run
+    branches:
+      include:
+        - main
+    always: true
+
 parameters:
   - name: environment
     displayName: Select Environment
@@ -45,3 +54,47 @@ stages:
               backendAzureRmStorageAccountName: 'maystg12'
               backendAzureRmContainerName: 'maycnt12'
               backendAzureRmKey: 'sid.tfstate'
+
+
+  - stage: SecondStage
+    displayName: Plan
+    jobs:
+      - job: terraformplan
+        steps:
+          - task: TerraformTask@5
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              backendServiceArm: 'may-sc'
+              backendAzureRmStorageAccountName: 'maystg12'
+              backendAzureRmContainerName: 'maycnt12'
+              backendAzureRmKey: 'sid.tfstate'
+
+          - task: TerraformTask@5
+            inputs:
+              provider: 'azurerm'
+              command: 'plan'
+              environmentServiceNameAzureRM: 'may-sc'
+
+  - stage: ThirdStage
+    displayName: Apply
+    jobs:
+      - job: terraformapply
+        steps:
+          - task: TerraformTask@5
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              backendServiceArm: 'may-sc'
+              backendAzureRmStorageAccountName: 'maystg12'
+              backendAzureRmContainerName: 'maycnt12'
+              backendAzureRmKey: 'sid.tfstate'
+
+          - task: TerraformTask@5
+            inputs:
+              provider: 'azurerm'
+              command: 'apply'
+              environmentServiceNameAzureRM: 'may-sc'
+
+          
+  
