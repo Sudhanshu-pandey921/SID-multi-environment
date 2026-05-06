@@ -54,7 +54,7 @@ variables:
     value: '${{ parameters.environment }}.tfstate'
 
 pool:
-  vmImage: ubuntu-latest   # ✅ Linux use kiya (curl scripts ke liye)
+  may-pool   # ✅ Linux use kiya (curl scripts ke liye)
 
 stages:
 
