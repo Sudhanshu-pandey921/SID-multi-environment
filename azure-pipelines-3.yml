@@ -23,7 +23,7 @@ schedules:
     branches:
       include:
         - main
-    always: false   # unnecessary runs avoid
+    always: false
 
 parameters:
   - name: environment
@@ -45,13 +45,18 @@ stages:
 
 # ------------------ INIT ------------------
 - stage: Init
-  displayName: Terraform Init
   jobs:
     - job: terraform_init
       steps:
+
+        # 🔥 FIX START
         - task: TerraformInstaller@1
           inputs:
             terraformVersion: $(tf_version)
+
+        - powershell: terraform version
+          displayName: Verify Terraform Installed
+        # 🔥 FIX END
 
         - task: TerraformTask@5
           displayName: Init
@@ -59,7 +64,6 @@ stages:
             provider: 'azurerm'
             command: 'init'
             workingDirectory: $(workingDir)
-
             backendServiceArm: 'may-sc'
             backendAzureRmStorageAccountName: 'maystg12'
             backendAzureRmContainerName: 'maycnt12'
@@ -68,14 +72,19 @@ stages:
 
 # ------------------ PLAN ------------------
 - stage: Plan
-  displayName: Terraform Plan
   dependsOn: Init
   jobs:
     - job: terraform_plan
       steps:
+
+        # 🔥 FIX START
         - task: TerraformInstaller@1
           inputs:
             terraformVersion: $(tf_version)
+
+        - powershell: terraform version
+          displayName: Verify Terraform Installed
+        # 🔥 FIX END
 
         - task: TerraformTask@5
           displayName: Init (Plan Stage)
@@ -83,7 +92,6 @@ stages:
             provider: 'azurerm'
             command: 'init'
             workingDirectory: $(workingDir)
-
             backendServiceArm: 'may-sc'
             backendAzureRmStorageAccountName: 'maystg12'
             backendAzureRmContainerName: 'maycnt12'
@@ -101,15 +109,20 @@ stages:
 
 # ------------------ APPLY ------------------
 - stage: Apply
-  displayName: Terraform Apply
   dependsOn: Plan
   condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
   jobs:
     - job: terraform_apply
       steps:
+
+        # 🔥 FIX START
         - task: TerraformInstaller@1
           inputs:
             terraformVersion: $(tf_version)
+
+        - powershell: terraform version
+          displayName: Verify Terraform Installed
+        # 🔥 FIX END
 
         - task: TerraformTask@5
           displayName: Init (Apply Stage)
@@ -117,7 +130,6 @@ stages:
             provider: 'azurerm'
             command: 'init'
             workingDirectory: $(workingDir)
-
             backendServiceArm: 'may-sc'
             backendAzureRmStorageAccountName: 'maystg12'
             backendAzureRmContainerName: 'maycnt12'
