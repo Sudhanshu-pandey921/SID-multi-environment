@@ -6,7 +6,7 @@ trigger:
       - feature/*
   paths:
     include:
-      - terraform/**
+      - SID-multi-environment/**
     exclude:
       - README.md
       - docs/**
@@ -18,7 +18,7 @@ pr:
       - develop
   paths:
     include:
-      - terraform/**
+      - SID-multi-environment/**
     exclude:
       - docs/**
 
@@ -36,7 +36,7 @@ variables:
     value: '1.5.7'
 
   - name: serviceConnection
-    value: 'azure-service-conn'
+    value: 'may-sc'   # ✅ FIXED
 
   - name: workingDir
     value: 'terraform/${{ parameters.environment }}'
@@ -54,7 +54,7 @@ variables:
     value: '${{ parameters.environment }}.tfstate'
 
 pool:
-  name: may-pool
+  vmImage: ubuntu-latest   # ✅ Linux use kiya (curl scripts ke liye)
 
 stages:
 
@@ -71,35 +71,27 @@ stages:
           inputs:
             terraformVersion: $(tfVersion)
 
-        # Terraform Init (no backend for validation)
-        - script: |
-            terraform init -backend=false
+        - script: terraform init -backend=false
           workingDirectory: $(workingDir)
           displayName: "Terraform Init (Local)"
 
-        # Terraform Format Check
-        - script: |
-            terraform fmt -check
+        - script: terraform fmt -check -recursive
           workingDirectory: $(workingDir)
           displayName: "Terraform Format Check"
 
-        # TFLint
         - script: |
             curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
             tflint
           workingDirectory: $(workingDir)
           displayName: "Run TFLint"
 
-        # TFSEC
         - script: |
             curl -s https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
             tfsec .
           workingDirectory: $(workingDir)
           displayName: "Run TFSEC"
 
-        # Validate
-        - script: |
-            terraform validate
+        - script: terraform validate
           workingDirectory: $(workingDir)
           displayName: "Terraform Validate"
 
@@ -114,8 +106,10 @@ stages:
     - job: CostJob
       steps:
         - script: |
+            terraform init -backend=false
             curl -fsSL https://raw.githubusercontent.com/infracost/infracost/master/scripts/install.sh | sh
             infracost breakdown --path $(workingDir)
+          workingDirectory: $(workingDir)
           displayName: "Run Infracost"
 
 
@@ -134,6 +128,7 @@ stages:
             terraformVersion: $(tfVersion)
 
         - task: AzureCLI@2
+          displayName: "Terraform Plan"
           inputs:
             azureSubscription: $(serviceConnection)
             scriptType: bash
@@ -146,9 +141,7 @@ stages:
                 -backend-config="key=$(backendKey)"
 
               terraform plan -out=tfplan
-
-          workingDirectory: $(workingDir)
-          displayName: "Terraform Plan"
+            workingDirectory: $(workingDir)
 
         - publish: $(workingDir)/tfplan
           artifact: tfplan
@@ -177,6 +170,7 @@ stages:
                   terraformVersion: $(tfVersion)
 
               - task: AzureCLI@2
+                displayName: "Terraform Apply NonProd"
                 inputs:
                   azureSubscription: $(serviceConnection)
                   scriptType: bash
@@ -189,8 +183,7 @@ stages:
                       -backend-config="key=$(backendKey)"
 
                     terraform apply -auto-approve tfplan
-
-                workingDirectory: $(workingDir)
+                  workingDirectory: $(workingDir)
 
 
 # ---------------------------
@@ -203,7 +196,7 @@ stages:
 
   jobs:
     - deployment: ProdDeployment
-      environment: prod   # 👉 Azure DevOps environment me approval configure karna hoga
+      environment: prod
       strategy:
         runOnce:
           deploy:
@@ -217,6 +210,7 @@ stages:
                   terraformVersion: $(tfVersion)
 
               - task: AzureCLI@2
+                displayName: "Terraform Apply Prod"
                 inputs:
                   azureSubscription: $(serviceConnection)
                   scriptType: bash
@@ -229,5 +223,4 @@ stages:
                       -backend-config="key=$(backendKey)"
 
                     terraform apply tfplan
-
-                workingDirectory: $(workingDir)
+                  workingDirectory: $(workingDir)
