@@ -46,7 +46,7 @@ stages:
             inputs:
               provider: 'azurerm'
               command: 'init'
-              workingDirectory: 'SID-multi-environment'
+             
               backendServiceArm: 'may-sc'
               backendAzureRmStorageAccountName: 'maystg12'
               backendAzureRmContainerName: 'maycnt12'
@@ -62,7 +62,7 @@ stages:
             inputs:
               provider: 'azurerm'
               command: 'init'
-              workingDirectory: 'SID-multi-environment'
+              
               backendServiceArm: 'may-sc'
               backendAzureRmStorageAccountName: 'maystg12'
               backendAzureRmContainerName: 'maycnt12'
@@ -84,7 +84,7 @@ stages:
             inputs:
               provider: 'azurerm'
               command: 'init'
-              workingDirectory: 'SID-multi-environment'
+             
               backendServiceArm: 'may-sc'
               backendAzureRmStorageAccountName: 'maystg12'
               backendAzureRmContainerName: 'maycnt12'
