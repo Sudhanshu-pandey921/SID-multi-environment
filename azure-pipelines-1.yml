@@ -1,0 +1,88 @@
+trigger:
+  branches:
+    include:
+      - main
+      - feature/*
+  paths:
+    include:
+      - SID-multi-environment/*
+    exclude:
+      - README.md
+
+pr:
+  branches:
+    include:
+      - main
+
+schedules:
+  - cron: "0 3 * * *"
+    displayName: Daily Run
+    branches:
+      include:
+        - main
+    always: true
+
+parameters:
+  - name: environment
+    displayName: Select Environment
+    type: string
+    default: dev
+    values:
+      - dev
+      - test
+      - prod
+
+variables:
+  - name: tf_version
+    value: 1.6.0
+
+pool:
+  name: may-pool
+
+stages:
+
+# ---------------- INIT ----------------
+  - stage: Init
+    displayName: Terraform Init
+    jobs:
+      - job: init
+        steps:
+          - task: TerraformTask@5
+            displayName: Init Terraform
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              backendServiceArm: 'may-sc'
+              backendAzureRmStorageAccountName: 'maystg12'
+              backendAzureRmContainerName: 'maycnt12'
+              backendAzureRmKey: 'sid.tfstate'
+
+# ---------------- PLAN ----------------
+  - stage: Plan
+    displayName: Terraform Plan
+    dependsOn: Init
+    jobs:
+      - job: plan
+        steps:
+          - task: TerraformTask@5
+            displayName: Terraform Plan
+            inputs:
+              provider: 'azurerm'
+              command: 'plan'
+              environmentServiceNameAzureRM: 'may-sc'
+
+# ---------------- APPLY ----------------
+  - stage: Apply
+    displayName: Terraform Apply
+    dependsOn: Plan
+    condition: succeeded()
+    jobs:
+      - job: apply
+        steps:
+          - task: TerraformTask@5
+            displayName: Terraform Apply
+            inputs:
+              provider: 'azurerm'
+              command: 'apply'
+              environmentServiceNameAzureRM: 'may-sc'
+              commandOptions: '-auto-approve'
